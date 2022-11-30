@@ -1,10 +1,9 @@
-
-import std/sequtils
 import std/tables
 import std/times
 import std/os
 import strformat
 import std/osproc
+import std/terminal
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -101,6 +100,17 @@ proc rm*(path: string) =
   ## Alias for [removeFile](https://nim-lang.org/docs/os.html#removeFile%2Cstring)
   removeFile(path)
 
+proc touch*(path: string) =
+  ## Acts like touch command. Creates file if it doesn't exist and updates modification time
+  ## if it does
+  if not path.fileExists:
+    path.writeFile("")
+  else:
+    path.setLastModificationTime(getTime())
+
+proc error(msg: string) =
+  stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
+
 proc run(target: Target) =
   let modified = target.lastModified
 
@@ -115,7 +125,8 @@ proc run(target: Target) =
     elif requirement.fileExists: # It might be a file
       requirementModTime = requirement.getLastModificationTime()
     else:
-      echo "Cannot satisfy requirement: ", requirement
+      error "Cannot satisfy requirement: " & requirement
+      quit 1
     outOfDate = outOfDate or modified < requirementModTime
   if outOfDate or not target.satisified:
     echo "Running ", target.name, "..."

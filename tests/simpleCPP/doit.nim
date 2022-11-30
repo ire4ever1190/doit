@@ -14,6 +14,7 @@ task("run", ["main"]):
   cmd "./main"
 
 task("clean", []):
+  echo "Removing main"
   rm "main"
 
 run()
