@@ -1,24 +1,18 @@
-import doit/graph
+import doit/[
+  api,
+]
 import std/unittest
+import std/[os, osproc]
 
+suite "Using build system":
+  let curr = getCurrentDir()
+  setup:
+    setCurrentDir(curr)
 
-
-suite "Graph":
-  test "Adding node":
-    var graph: Graph
-    graph.addNode(newTarget("test"))
-    check graph[newTarget("test")].len == 0
-
-  test "Adding edge":
-    var graph: Graph
-    let
-      parent = newTarget("parent")
-      child = newTarget("child")
-
-    graph.addNode(parent)
-    graph.addNode(child)
-    graph.addEdge(parent, child)
-
-    check:
-      graph[parent].len == 1
-      graph[child].len == 0
+  test "simple C++ project":
+    setCurrentDir("tests/simpleCPP")
+    removeFile(".doit")
+    let (outp, exitCode) = execCmdEx("doit all")
+    checkpoint outp
+    check exitCode == 0
+    check fileExists("main")
