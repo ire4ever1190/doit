@@ -11,11 +11,7 @@ suite "touch":
   test "File modification time is updated":
     const file = "exists"
     writeFile(file, "")
-    let
-      mtime = file.getLastModificationTime()
-      atime = file.getLastAccessTime()
-    sleep 10
+    let mtime = file.getLastModificationTime()
+    sleep 10 # Need to sleep a second cause of windows precision
     touch file
-    check:
-      mtime < file.getLastModificationTime()
-      atime < file.getLastAccessTime()
+    check mtime < file.getLastModificationTime()
