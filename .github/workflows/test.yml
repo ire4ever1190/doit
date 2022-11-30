@@ -11,10 +11,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: {{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     name: Nim  {{ matrix.os }}
     steps:
-
     - name: Setup Nim Enviroment
       uses: actions/checkout@v3
 
