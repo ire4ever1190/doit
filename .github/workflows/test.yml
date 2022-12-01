@@ -21,13 +21,6 @@ jobs:
       with:
           nim-version: "stable"
 
-    - name: Cache choosenim
-      id: cache-choosenim
-      uses: actions/cache@v1
-      with:
-        path: ~/.nimble
-        key: nimble-${{ hashFiles('*.nimble') }}
-
     - name: Install nim dependencies
       run: nimble update && nimble install -y
 

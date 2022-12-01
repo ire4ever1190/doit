@@ -1,4 +1,5 @@
 import std/unittest
+import doit/api
 import std/[os, osproc, strutils]
 
 suite "Black box tests":
@@ -18,8 +19,7 @@ suite "Black box tests":
     setCurrentDir("tests" / folder)
     if compileOption("forceBuild"):
       removeFile(".doit")
-    let (outp, exitCode) = execCmdEx("doit ")
-    checkpoint outp
+    let (outp, exitCode) = execCmdEx("doit")
     check exitCode == 0
 
   test "simple C++ project":
@@ -58,11 +58,16 @@ suite "Black box tests":
 
   test "Runs if requirement is newer":
     goto("depTests")
-    writeFile("bar", "")
+    touch "bar"
     sleep 10
-    writeFile("someFile", "")
-    let (outp, exitCode) = execCmdEx("doit bar")
-    check:
-      "Writing bar" in outp
-      exitCode == 0
+    touch "someFile"
+    check "Writing bar" in runTask("bar")
+
+  test "Automatically finds dependencies":
+    goto("autoDeps")
+    rm "test"
+    check "Compiling test.nim" in runTask("test")
+    check "Compiling test.nim" notin runTask("test")
+    touch "foo.nim"
+    check "Compiling test.nim" in runTask("test")
 

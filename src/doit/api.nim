@@ -1,9 +1,12 @@
 import std/tables
 import std/times
 import std/os
-import strformat
+import std/strformat
 import std/osproc
 import std/terminal
+
+
+import deps
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -31,7 +34,8 @@ type
 
 # TODO: Lazy load dependencies
 
-var targets: Table[string, Target]
+var targets*: Table[string, Target]
+  ## All the targets
 
 proc safeLastModified(t: Target): Time =
   ## Acts like normal getLastModificationTime except returns oldest date
@@ -39,10 +43,17 @@ proc safeLastModified(t: Target): Time =
   if t.name.fileExists:
     result = t.name.getLastModificationTime()
 
+func fileExt*(path: string): string =
+  ## Returns the file extension of a path
+  let pos = path.searchExtPos()
+  if pos != -1:
+    result = path[pos + 1 .. ^1]
+
 proc target*(name: string, requires: openArray[string] = [],
              lastModified: LastModifiedHandler = safeLastModified,
              handler: TargetHandler = nil,
              satisfier: SatisfiedHandler = nil) =
+  let ext = name.fileExt
   targets[name] = Target(
       name: name,
       requires: @requires,
@@ -111,11 +122,11 @@ proc touch*(path: string) =
 proc error(msg: string) =
   stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
 
-proc run(target: Target) =
+proc run*(target: Target) =
+  ## Runs a target. Target will only run if its out of date or unsatisfied
   let modified = target.lastModified
 
   var outOfDate = modified == Time.high
-
   for requirement in target.requires:
     var requirementModTime: Time
     if requirement in targets:
