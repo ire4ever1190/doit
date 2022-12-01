@@ -19,9 +19,9 @@ type
     ## Gets ran to check if a target is satisfied or not.
     ## You won't need to edit this 90% of the time
 
-  Target = object
-    name: string
-    requires: seq[string]
+  Target* = object
+    name*: string
+    requires*: seq[string]
     # At this point am I just reimplementing inheritance?
     lastModifiedProc: LastModifiedHandler
     satisfiedProc: SatisfiedHandler
@@ -40,8 +40,9 @@ var targets*: Table[string, Target]
 proc safeLastModified(t: Target): Time =
   ## Acts like normal getLastModificationTime except returns oldest date
   ## if file doesnt exist instead of erroring
-  if t.name.fileExists:
+  if t.name.fileExists or t.name.dirExists:
     result = t.name.getLastModificationTime()
+
 
 func fileExt*(path: string): string =
   ## Returns the file extension of a path
@@ -51,8 +52,8 @@ func fileExt*(path: string): string =
 
 proc target*(name: string, requires: openArray[string] = [],
              lastModified: LastModifiedHandler = safeLastModified,
-             handler: TargetHandler = nil,
-             satisfier: SatisfiedHandler = nil) =
+             satisfier: SatisfiedHandler = nil,
+             handler: TargetHandler = nil) =
   let ext = name.fileExt
   targets[name] = Target(
       name: name,
@@ -63,8 +64,9 @@ proc target*(name: string, requires: openArray[string] = [],
   )
 
 proc task*(name: string, requires: openArray[string] = [],
+           lastModified: LastModifiedHandler = nil,
            handler: TargetHandler = nil) =
-  target(name, requires, nil, handler, proc (t: Target): bool = false)
+  target(name, requires, lastModified, proc (t: Target): bool = false, handler)
 
 template target*(name: string, dependencies: openArray[string], body: untyped) =
   target(name, dependencies, handler = proc (target: Target) =
@@ -94,23 +96,56 @@ proc satisified*(target: Target): bool =
   else:
     # If the target doesn't have a custom satisifier then we just
     # check if there is a file with the same name
-    target.name.fileExists
+    target.name.fileExists or target.name.dirExists
 
 proc handle(target: Target) =
   ## Runs targets handler if it exists
   if target.handler != nil:
     target.handler(target)
 
-proc cmd*(cmd: string): string {.discardable.} =
+proc cmd*(cmd: string) =
+  ## Runs command and sends output to console
   let process = startProcess(cmd, options = {poUsePath, poEvalCommand, poStdErrToStdOut, poParentStreams})
   let code = process.waitForExit()
   if code != 0:
     raise (ref CommandFailedError)(code: code, command: cmd)
 
-proc rm*(path: string) =
-  ## Alias for [removeFile](https://nim-lang.org/docs/os.html#removeFile%2Cstring)
-  removeFile(path)
+proc rm*(path: string, recursive = false) =
+  ## Acts like `rm` command except doesn't fail if file doesn't exist.
+  ## Only deletes directorys if `recursive = true`
+  if recursive and existsDir(path):
+    removeDir(path)
+  else:
+    removeFile(path)
 
+proc mv*(src, dest: string) =
+  ## Moves **src** to **dest**. Acts like `mv` command
+  if dirExists(src):
+    moveDir(src, dest)
+  else:
+    moveFile(src, dest)
+# Some aliases to make the experience more shell like
+{.push inline.}
+proc cd*(path: string) =
+  ## Alias for [setCurrentDir](https://nim-lang.org/docs/os.html#setCurrentDir%2Cstring)
+  setCurrentDir(path)
+
+proc pwd*(): string =
+  ## Alias for [getCurrentDir](https://nim-lang.org/docs/os.html#getCurrentDir)
+  getCurrentDir()
+
+proc mkdir*(dir: string) =
+  ## Alias for [https://nim-lang.org/docs/os.html#createDir%2Cstring]. Works like `mkdir -p`
+  createDir(dir)
+
+{.pop.}
+
+template cd*(path: string, body) =
+  ## Runs **body** inside **path** and returns to previous directory when finished
+  let parent = pwd()
+  cd path
+  body
+  cd parent
 proc touch*(path: string) =
   ## Acts like touch command. Creates file if it doesn't exist and updates modification time
   ## if it does
