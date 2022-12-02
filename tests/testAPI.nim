@@ -25,6 +25,13 @@ suite "Glob":
       "hello.txt".matches(g)
       not "test/hello.txt".matches(g)
 
+  test "Multiple * in glob can match":
+    let g = glob"*foo*"
+    check:
+      "foo".matches(g)
+      "ffoo".matches(g)
+      "foofoofoofoo".matches(g)
+
   test "** matches directories":
     let g = glob"**"
     check:
@@ -36,12 +43,12 @@ suite "Glob":
     let g = glob"**/*.nim"
     check:
       "/home/test/test.nim".matches(g)
-      "test.nim".matches(g)
+      "/test.nim".matches(g)
       not "test.nims".matches(g)
 
   test "Expand finds all files":
     let files = toSeq("**/doit.nim".glob.expand("."))
     for file in walkDirRec("tests/"):
       if file.endsWith("doit.nim"):
-        check file in files
+        check ("./" & file) in files
 
