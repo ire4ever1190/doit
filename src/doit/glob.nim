@@ -21,6 +21,7 @@ const
 
 type
   Glob* = object
+    ## Stores a glob pattern
     parts: seq[string]
 
 
@@ -40,7 +41,7 @@ proc glob*(x: string): Glob =
     var token: string
     if x[i] == '*':
       # Check if double or single star
-      if x.skip("**", i) >= 2:
+      if x.skip("**", i) >= 2: # If there are more stars we will get them next time
         i += 2
         token = "**"
       else:
@@ -77,12 +78,20 @@ func matches*(path: openArray[char], g: Glob): bool {.raises: [].}=
   #==#
   return path.matches(g.parts)
 
+iterator expand*(globs: openArray[Glob], dir: string): string =
+  ## Checks a series of globs against every file in a directory (recursively) and
+  ## yields a file if any of the globs match.
+  for file in walkDirRec(dir):
+    # Check if any of the globs match the file.
+    # Only one needs to match
+    for glob in globs:
+      if file.matches(glob):
+        yield file
+        break
 
 iterator expand*(g: Glob, dir: string): string =
-  for file in walkDirRec(dir):
-    if file.matches(g):
-      yield file
+  ## Checks a glob against every file in a directory (recursively) and
+  ## yields the file if the glob matches
+  for file in [g].expand(dir):
+    yield file
 
-when isMainModule:
-  let g = glob"*.nim"
-  echo "testSample/hello/hello.nim".matches(g)
