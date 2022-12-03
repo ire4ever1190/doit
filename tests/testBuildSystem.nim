@@ -7,8 +7,8 @@ block:
   let (outp, exitCode) = execCmdEx("nimble build")
   assert exitCode == QuitSuccess, outp
 
-let doitBin = findExe("doit")
-assert doitBin != "", "Cannot find doit"
+let doitBin = expandFileName("doit" & (when defined(windows): ".exe" else: ""))
+
 
 suite "Black box tests":
   let curr = getCurrentDir()
