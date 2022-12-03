@@ -33,22 +33,23 @@ func startsWith(s: openArray[char], with: string): bool =
     inc i
   result = i == with.len
 
-proc glob*(x: string): Glob =
+proc glob*(path: string): Glob =
   ## Creates a glob pattern
   # This basically tokenises the string into globs and non glob parts
+  let path = path.unixToNativePath()
   var i = 0
-  while i < x.len:
+  while i < path.len:
     var token: string
-    if x[i] == '*':
+    if path[i] == '*':
       # Check if double or single star
-      if x.skip("**", i) >= 2: # If there are more stars we will get them next time
+      if path.skip("**", i) >= 2: # If there are more stars we will get them next time
         i += 2
         token = "**"
       else:
         i += 1
         token = "*"
     else:
-      i += x.parseUntil(token, '*', i)
+      i += path.parseUntil(token, '*', i)
     result.parts &= token
 
 func matches(x: openArray[char], tokens: openArray[string]): bool {.raises: [].} =
@@ -56,7 +57,7 @@ func matches(x: openArray[char], tokens: openArray[string]): bool {.raises: [].}
   # Keep stack of where branches happened
   if tokens.len > 0 and tokens[0] in stars:
     # Make sure we aren't a single star trying to make a dir seperator
-    if x.len > 0 and x[0] == '/' and tokens[0] == singleStar:
+    if x.len > 0 and x[0] == DirSep and tokens[0] == singleStar:
       return false
     # First check if if matches 0 amount of x
     # Then check if it matches 1 amount of x (And see if it can continue)
@@ -69,14 +70,14 @@ func matches(x: openArray[char], tokens: openArray[string]): bool {.raises: [].}
   else:
     return x.len == 0 and tokens.len == 0
 
-func matches*(path: openArray[char], g: Glob): bool {.raises: [].}=
+func matches*(path: string, g: Glob): bool {.raises: [].}=
   ## Checks if a path matches a glob
   runnableExamples:
     let pat = glob"**/*.nim"
     assert "/test.nim".matches(pat)
     assert "tests/hello.nim".matches(pat)
   #==#
-  return path.matches(g.parts)
+  return path.unixToNativePath().matches(g.parts)
 
 iterator expand*(globs: openArray[Glob], dir: string): string =
   ## Checks a series of globs against every file in a directory (recursively) and

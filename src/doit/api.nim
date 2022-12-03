@@ -4,6 +4,7 @@ import std/os
 import strformat
 import std/osproc
 import std/terminal
+import std/glob
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -39,7 +40,7 @@ proc safeLastModified(t: Target): Time =
   if t.name.fileExists:
     result = t.name.getLastModificationTime()
 
-proc target*(name: string, requires: openArray[string] = [],
+proc target*(name: string, requires: varargs[string] = [],
              lastModified: LastModifiedHandler = safeLastModified,
              handler: TargetHandler = nil,
              satisfier: SatisfiedHandler = nil) =

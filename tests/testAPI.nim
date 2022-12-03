@@ -50,5 +50,5 @@ suite "Glob":
     let files = toSeq("**/doit.nim".glob.expand("."))
     for file in walkDirRec("tests/"):
       if file.endsWith("doit.nim"):
-        check ("./" & file) in files
+        check ("." & DirSep & file) in files
 
