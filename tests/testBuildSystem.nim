@@ -7,7 +7,9 @@ block:
   let (outp, exitCode) = execCmdEx("nimble build")
   assert exitCode == QuitSuccess, outp
 
-let doitBin = expandFileName("doit" & (when defined(windows): ".exe" else: ""))
+func exe(file: string): string = file.addFileExt(ExeExt)
+
+let doitBin = expandFileName("doit".exe)
 
 
 suite "Black box tests":
@@ -35,7 +37,7 @@ suite "Black box tests":
     goto("simpleCPP")
     removeFile("main")
     discard runTask("main")
-    check fileExists("main")
+    check fileExists("main".exe)
 
   test "Tasks always run":
     goto("simpleCPP")
@@ -44,7 +46,7 @@ suite "Black box tests":
     check:
       fileExists("main")
       "Removing main" in runTask("clean")
-      not fileExists("main")
+      not fileExists("main".exe)
       "Removing main" in runTask("clean")
 
   test "Target runs if not satisfied":
