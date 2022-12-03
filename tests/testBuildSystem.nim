@@ -1,6 +1,15 @@
 import std/unittest
 import std/[os, osproc, strutils]
 
+
+# Build doit first
+block:
+  let (outp, exitCode) = execCmdEx("nimble build")
+  assert exitCode == QuitSuccess, outp
+
+let doitBin = findExe("doit")
+assert doitBin != "", "Cannot find doit"
+
 suite "Black box tests":
   let curr = getCurrentDir()
   setup:
@@ -8,9 +17,9 @@ suite "Black box tests":
 
   proc runTask(task: string): string =
     ## Just runs a task in the current dir
-    let (outp, exitCode) = execCmdEx("doit " & task)
+    let (outp, exitCode) = execCmdEx(doitBin & " " & task)
     checkpoint outp
-    check exitCode == 0
+    check exitCode == QuitSuccess
     result = outp
 
   template goto(folder) =
@@ -18,9 +27,9 @@ suite "Black box tests":
     setCurrentDir("tests" / folder)
     if compileOption("forceBuild"):
       removeFile(".doit")
-    let (outp, exitCode) = execCmdEx("doit ")
+    let (outp, exitCode) = execCmdEx(doitBin)
     checkpoint outp
-    check exitCode == 0
+    check exitCode == QuitSuccess
 
   test "simple C++ project":
     goto("simpleCPP")
@@ -51,18 +60,15 @@ suite "Black box tests":
   test "Fails if requirement missing":
     goto("depTests")
     removeFile("someFile")
-    let (outp, exitCode) = execCmdEx("doit bar")
+    let (outp, exitCode) = execCmdEx(doItBin & " bar")
     check:
       "Cannot satisfy requirement: someFile" in outp
-      exitCode == 1
+      exitCode == QuitFailure
 
   test "Runs if requirement is newer":
     goto("depTests")
     writeFile("bar", "")
     sleep 10
     writeFile("someFile", "")
-    let (outp, exitCode) = execCmdEx("doit bar")
-    check:
-      "Writing bar" in outp
-      exitCode == 0
+    check "Writing bar" in runTask("bar")
 
