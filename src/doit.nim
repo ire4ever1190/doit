@@ -3,7 +3,6 @@ when isMainModule:
   const
     srcName = "doit.nim"
     binName = ".doit"
-
   if not fileExists("doit.nim"):
     echo "Can't find doit.nim in current directory"
     quit 1

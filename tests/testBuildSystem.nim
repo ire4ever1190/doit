@@ -1,5 +1,15 @@
 import std/unittest
 import std/[os, osproc, strutils]
+import doit/api
+
+# Build doit first
+block:
+  let (outp, exitCode) = execCmdEx("nimble build")
+  assert exitCode == QuitSuccess, outp
+
+
+let doitBin = expandFileName("doit".exe)
+
 
 suite "Black box tests":
   let curr = getCurrentDir()
@@ -8,9 +18,9 @@ suite "Black box tests":
 
   proc runTask(task: string): string =
     ## Just runs a task in the current dir
-    let (outp, exitCode) = execCmdEx("doit " & task)
+    let (outp, exitCode) = execCmdEx(doitBin & " " & task)
     checkpoint outp
-    check exitCode == 0
+    check exitCode == QuitSuccess
     result = outp
 
   template goto(folder) =
@@ -18,24 +28,24 @@ suite "Black box tests":
     setCurrentDir("tests" / folder)
     if compileOption("forceBuild"):
       removeFile(".doit")
-    let (outp, exitCode) = execCmdEx("doit ")
+    let (outp, exitCode) = execCmdEx(doitBin)
     checkpoint outp
-    check exitCode == 0
+    check exitCode == QuitSuccess
 
   test "simple C++ project":
     goto("simpleCPP")
-    removeFile("main")
-    discard runTask("main")
-    check fileExists("main")
+    removeFile("main".exe)
+    discard runTask("main".exe)
+    check fileExists("main".exe)
 
   test "Tasks always run":
     goto("simpleCPP")
     writeFile("clean", "")
-    discard runTask("main")
+    discard runTask("main".exe)
     check:
-      fileExists("main")
+      fileExists("main".exe)
       "Removing main" in runTask("clean")
-      not fileExists("main")
+      not fileExists("main".exe)
       "Removing main" in runTask("clean")
 
   test "Target runs if not satisfied":
@@ -51,18 +61,15 @@ suite "Black box tests":
   test "Fails if requirement missing":
     goto("depTests")
     removeFile("someFile")
-    let (outp, exitCode) = execCmdEx("doit bar")
+    let (outp, exitCode) = execCmdEx(doItBin & " bar")
     check:
       "Cannot satisfy requirement: someFile" in outp
-      exitCode == 1
+      exitCode == QuitFailure
 
   test "Runs if requirement is newer":
     goto("depTests")
     writeFile("bar", "")
     sleep 10
     writeFile("someFile", "")
-    let (outp, exitCode) = execCmdEx("doit bar")
-    check:
-      "Writing bar" in outp
-      exitCode == 0
+    check "Writing bar" in runTask("bar")
 
