@@ -5,7 +5,7 @@ target("main.h", []):
 
 target("main.cpp", ["main.h"])
 
-target("main", ["main.cpp", "foo.h"]):
+target("main".exe, ["main.cpp", "foo.h"]):
   cmd "g++ -o main main.cpp"
 
 target("all", ["main"])
