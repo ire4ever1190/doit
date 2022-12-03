@@ -34,16 +34,16 @@ suite "Black box tests":
 
   test "simple C++ project":
     goto("simpleCPP")
-    removeFile("main")
-    discard runTask("main")
+    removeFile("main".exe)
+    discard runTask("main".exe)
     check fileExists("main".exe)
 
   test "Tasks always run":
     goto("simpleCPP")
     writeFile("clean", "")
-    discard runTask("main")
+    discard runTask("main".exe)
     check:
-      fileExists("main")
+      fileExists("main".exe)
       "Removing main" in runTask("clean")
       not fileExists("main".exe)
       "Removing main" in runTask("clean")
