@@ -15,6 +15,6 @@ task("run", ["main"]):
 
 task("clean", []):
   echo "Removing main"
-  rm "main"
+  rm "main".exe
 
 run()

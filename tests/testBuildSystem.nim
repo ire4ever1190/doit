@@ -1,13 +1,12 @@
 import std/unittest
 import std/[os, osproc, strutils]
-
+import doit/api
 
 # Build doit first
 block:
   let (outp, exitCode) = execCmdEx("nimble build")
   assert exitCode == QuitSuccess, outp
 
-func exe(file: string): string = file.addFileExt(ExeExt)
 
 let doitBin = expandFileName("doit".exe)
 

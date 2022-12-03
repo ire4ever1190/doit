@@ -101,6 +101,19 @@ proc rm*(path: string) =
   ## Alias for [removeFile](https://nim-lang.org/docs/os.html#removeFile%2Cstring)
   removeFile(path)
 
+func exe*(file: string): string {.inline, raises: [].} =
+  ## Adds platform executable extension to binary name.
+  ## Make sure to use this when referring to binaries so they work
+  ## across platforms
+  runnableExamples:
+    when defined(windows):
+      assert "main".exe == "main.exe"
+    else:
+      assert "main".exe == "main"
+  #==#
+  file.addFileExt(ExeExt)
+
+
 proc touch*(path: string) =
   ## Acts like touch command. Creates file if it doesn't exist and updates modification time
   ## if it does
