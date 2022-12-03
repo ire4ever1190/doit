@@ -4,7 +4,7 @@ import std/os
 import strformat
 import std/osproc
 import std/terminal
-import std/glob
+import glob
 
 type
   LastModifiedHandler* = proc (t: Target): Time
