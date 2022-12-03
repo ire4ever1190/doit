@@ -4,7 +4,8 @@ import std/os
 import strformat
 import std/osproc
 import std/terminal
-import glob
+
+import glob, scriptUtils
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -24,12 +25,6 @@ type
     lastModifiedProc: LastModifiedHandler
     satisfiedProc: SatisfiedHandler
     handler: TargetHandler
-
-  CommandFailedError* = object of OSError
-    ## Raised when command failed (If using procs here)
-    command*, output*: string
-    code*: int
-
 # TODO: Lazy load dependencies
 
 var targets: Table[string, Target]
@@ -91,15 +86,7 @@ proc handle(target: Target) =
   if target.handler != nil:
     target.handler(target)
 
-proc cmd*(cmd: string): string {.discardable.} =
-  let process = startProcess(cmd, options = {poUsePath, poEvalCommand, poStdErrToStdOut, poParentStreams})
-  let code = process.waitForExit()
-  if code != 0:
-    raise (ref CommandFailedError)(code: code, command: cmd)
 
-proc rm*(path: string) =
-  ## Alias for [removeFile](https://nim-lang.org/docs/os.html#removeFile%2Cstring)
-  removeFile(path)
 
 func exe*(file: string): string {.inline, raises: [].} =
   ## Adds platform executable extension to binary name.
@@ -112,15 +99,6 @@ func exe*(file: string): string {.inline, raises: [].} =
       assert "main".exe == "main"
   #==#
   file.addFileExt(ExeExt)
-
-
-proc touch*(path: string) =
-  ## Acts like touch command. Creates file if it doesn't exist and updates modification time
-  ## if it does
-  if not path.fileExists:
-    path.writeFile("")
-  else:
-    path.setLastModificationTime(getTime())
 
 proc error(msg: string) =
   stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
@@ -163,3 +141,4 @@ proc run*() =
     for target in targets.keys:
       echo "  ", target
 
+export scriptUtils
