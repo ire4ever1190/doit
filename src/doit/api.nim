@@ -4,7 +4,8 @@ import std/os
 import strformat
 import std/osproc
 import std/terminal
-import glob
+
+import glob, scriptUtils
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -24,12 +25,6 @@ type
     lastModifiedProc: LastModifiedHandler
     satisfiedProc: SatisfiedHandler
     handler: TargetHandler
-
-  CommandFailedError* = object of OSError
-    ## Raised when command failed (If using procs here)
-    command*, output*: string
-    code*: int
-
 # TODO: Lazy load dependencies
 
 var targets: Table[string, Target]
@@ -91,56 +86,7 @@ proc handle(target: Target) =
   if target.handler != nil:
     target.handler(target)
 
-proc cmd*(cmd: string): string {.discardable.} =
-  let process = startProcess(cmd, options = {poUsePath, poEvalCommand, poStdErrToStdOut, poParentStreams})
-  let code = process.waitForExit()
-  if code != 0:
-    raise (ref CommandFailedError)(code: code, command: cmd)
 
-proc rm*(path: string, recursive = false) =
-  ## Acts like `rm` command except doesn't fail if file doesn't exist.
-  ## Only deletes directorys if `recursive = true`
-  if recursive and existsDir(path):
-    removeDir(path)
-  else:
-    removeFile(path)
-
-
-proc mv*(src, dest: string) =
-  ## Moves **src** to **dest**. Acts like `mv` command
-  if dirExists(src):
-    moveDir(src, dest)
-  else:
-    moveFile(src, dest)
-# Some aliases to make the experience more shell like
-{.push inline.}
-proc cd*(path: string) =
-  ## Alias for [setCurrentDir](https://nim-lang.org/docs/os.html#setCurrentDir%2Cstring)
-  setCurrentDir(path)
-
-proc pwd*(): string =
-  ## Alias for [getCurrentDir](https://nim-lang.org/docs/os.html#getCurrentDir)
-  getCurrentDir()
-
-proc mkdir*(dir: string) =
-  ## Alias for [https://nim-lang.org/docs/os.html#createDir%2Cstring]. Works like `mkdir -p`
-  createDir(dir)
-
-{.pop.}
-
-template cd*(path: string, body) =
-  ## Runs **body** inside **path** and returns to previous directory when finished
-  runnableExamples "-r:off":
-    let orig = pwd()
-    cd "someFolder":
-      assert pwd() == orig / "someFolder"
-    # Once we exit the block we are back in the original
-    assert pwd() == orig
-  #==#
-  let parent = pwd()
-  cd path
-  body
-  cd parent
 
 func exe*(file: string): string {.inline, raises: [].} =
   ## Adds platform executable extension to binary name.
@@ -153,15 +99,6 @@ func exe*(file: string): string {.inline, raises: [].} =
       assert "main".exe == "main"
   #==#
   file.addFileExt(ExeExt)
-
-
-proc touch*(path: string) =
-  ## Acts like touch command. Creates file if it doesn't exist and updates modification time
-  ## if it does
-  if not path.fileExists:
-    path.writeFile("")
-  else:
-    path.setLastModificationTime(getTime())
 
 proc error(msg: string) =
   stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
@@ -204,3 +141,4 @@ proc run*() =
     for target in targets.keys:
       echo "  ", target
 
+export scriptUtils
