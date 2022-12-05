@@ -74,8 +74,54 @@ proc task*(name: string, requirements: openArray[string]) =
   ## Use this to alias a series of requirements
   addTask(name, requirements)
 
+proc parseTargetImpl(body: NimNode, isTask: bool): tuple[hand, lastMod, satisfied: NimNode, help: string] =
+  result.hand = newStmtList()
+  result.lastMod = newNilLit()
+  result.satisfied = newNilLit()
+
+
+  for node in body:
+    if node.kind == nnkCall and node[0].kind == nnkIdent:
+      case node[0].strVal.nimIdentNormalize():
+      of "lastmodified":
+        if result.lastMod.kind != nnkNilLit:
+          "lastModified handler already specified".error(node)
+        result.lastMod = node[1]
+      of "satisfied":
+        if isTask:
+          "Cannot have custom satisfier in a task".error(node)
+        else:
+          if result.satisfied.kind != nnkNilLit:
+            "satisfied handler already specified".error(node)
+          result.satisfied = node[1]
+      else:
+        result.hand &= node
+    elif node.kind == nnkCommentStmt:
+      if result.help == "":
+        result.help = node.strVal
+    else:
+      result.hand &= node
+  # Build the needed procs
+  proc targetParam(): NimNode = newIdentDefs(ident"t", bindSym"Target")
+  if result.lastMod.kind != nnkNilLit:
+    result.lastMod = newProc(
+      params = [bindSym"Time", targetParam()],
+      body = result.lastMod
+    )
+  if result.satisfied.kind != nnkNilLit:
+    result.satisfied = newProc(
+      params = [bindSym"bool", targetParam()],
+      body = result.satisfied
+    )
+  result.hand = newProc(
+    params = [newEmptyNode(), targetParam()],
+    body = result.hand
+  )
+
+
 macro target*(name: string, requirements: openArray[string], body: untyped) =
-  ## Allows you to attach some code to a target.
+  ## Allows you to attach some code to a target.handlerBody
+  ## The target can be accessed from within the handler with variable `t`
   runnableExamples:
     target("something", ["something.nim"]):
       cmd "nim c something.nim"
@@ -94,87 +140,15 @@ macro target*(name: string, requirements: openArray[string], body: untyped) =
   #==#
   # Copy the handler body across.
   # We need to do this since we need to find blocks that are other handlers
-  result = newStmtList()
-  var
-    handlerBody = newStmtList()
-    lastModifiedBody: NimNode = newNilLit()
-    satisfiedBody: NimNode = newNilLit()
-    help = ""
-  for node in body:
-    if node.kind == nnkCall and node[0].kind == nnkIdent:
-      case node[0].strVal.nimIdentNormalize():
-      of "lastmodified":
-        if lastModifiedBody.kind != nnkNilLit:
-          "lastModified handler already specified".error(node)
-        lastModifiedBody = node[1]
-      of "satisfied":
-        if satisfiedBody.kind != nnkNilLit:
-          "satisfied handler already specified".error(node)
-        satisfiedBody = node[1]
-      else:
-        handlerBody &= node
-    elif node.kind == nnkCommentStmt:
-      if help == "":
-        help = node.strVal
-    else:
-      handlerBody &= node
-  # Build the needed procs
-  proc targetParam(): NimNode = newIdentDefs(ident"t", bindSym"Target")
-  if lastModifiedBody.kind != nnkNilLit:
-    lastModifiedBody = newProc(
-      params = [bindSym"Time", targetParam()],
-      body = lastModifiedBody
-    )
-  if satisfiedBody.kind != nnkNilLit:
-    satisfiedBody = newProc(
-      params = [bindSym"bool", targetParam()],
-      body = satisfiedBody
-    )
-  handlerBody = newProc(
-    params = [newEmptyNode(), targetParam()],
-    body = handlerBody
-  )
+  let (handler, lastModified, satisifed, help) = parseTargetImpl(body, false)
   result = quote do:
-    addTarget(`name`, `requirements`, `help`, `lastModifiedBody`, `satisfiedBody`, `handlerBody`)
+    addTarget(`name`, `requirements`, `help`, `lastModified`, `satisifed`, `handler`)
 
 macro task*(name: string, requirements: untyped, body: untyped): untyped =
   ## Like [macro target] except doesn't support satisfied block (Since tasks can never be satisifed)
-  result = newStmtList()
-  var
-    handlerBody = newStmtList()
-    lastModifiedBody: NimNode = newNilLit()
-    help = ""
-  for node in body:
-    if node.kind == nnkCall and node[0].kind == nnkIdent:
-      case node[0].strVal.nimIdentNormalize():
-      of "lastmodified":
-        if lastModifiedBody.kind != nnkNilLit:
-          "lastModified handler already specified".error(node)
-        lastModifiedBody = node[1]
-      of "satisfied":
-        "Cannot have custom satisfier in a task".error(node)
-      else:
-        handlerBody &= node
-    elif node.kind == nnkCommentStmt:
-      if help == "":
-        help = node.strVal
-      else:
-        "Please have all help comments together".error(node)
-    else:
-      handlerBody &= node
-  # Build the needed procs
-  proc targetParam(): NimNode = newIdentDefs(ident"t", bindSym"Target")
-  if lastModifiedBody.kind != nnkNilLit:
-    lastModifiedBody = newProc(
-      params = [bindSym"Time", targetParam()],
-      body = lastModifiedBody
-    )
-  handlerBody = newProc(
-    params = [newEmptyNode(), targetParam()],
-    body = handlerBody
-  )
+  let (handler, lastModified, _, help) = parseTargetImpl(body, true)
   result = quote do:
-    addTask(`name`, `requirements`, `help`, `lastModifiedBody`, `handlerBody`)
+    addTask(`name`, `requirements`, `help`, `lastModified`, `handler`)
 
 proc lastModified*(target: Target): Time =
   ## Returns the time a target was last modified.
