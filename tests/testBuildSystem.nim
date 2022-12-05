@@ -75,8 +75,15 @@ suite "Black box tests":
 
   test "Last modification handler":
     goto "macroDSL"
-    check "1970-01-01T10:00:10+10:00" in runTask("lastMod")
+    check "1970-01-01T10:00:10" in runTask("lastMod")
 
   test "Satisified handler":
     goto "macroDSL"
     check "This shouldn't happen" notin runTask("satisfied")
+
+  test "Help message in output":
+    goto "macroDSL"
+    let help = runTask("")
+    check:
+      "Target with custom last modification time" in help
+      "Target that tests if satisifed or not" in help
