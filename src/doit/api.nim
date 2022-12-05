@@ -21,6 +21,7 @@ type
 
   Target = object
     name: string
+    help: string
     requires: seq[string]
     # At this point am I just reimplementing inheritance?
     lastModifiedProc: LastModifiedHandler
@@ -41,13 +42,15 @@ proc safeLastModified(t: Target): Time =
 proc alwaysFalse(t: Target): bool = false
 
 proc addTarget(name: string, requires: openArray[string],
-             lastModified: LastModifiedHandler = nil,
-             satisfier: SatisfiedHandler = nil,
-             handler: TargetHandler = nil) =
+               help = "",
+               lastModified: LastModifiedHandler = nil,
+               satisfier: SatisfiedHandler = nil,
+               handler: TargetHandler = nil) =
   ## Proc to add target directly with your own handlers
   targets[name] = Target(
       name: name,
       requires: @requires,
+      help: help,
       lastModifiedProc: lastModified,
       handler: handler,
       satisfiedProc: satisfier
@@ -55,10 +58,11 @@ proc addTarget(name: string, requires: openArray[string],
 
 
 proc addTask*(name: string, requires: openArray[string],
+              help = "",
               lastModified: LastModifiedHandler = nil,
               handler: TargetHandler = nil) =
   ## Proc to add task directly with your own handlers
-  addTarget(name, requires, nil, alwaysFalse, handler)
+  addTarget(name, requires, help, nil, alwaysFalse, handler)
 
 proc target*(name: string, requirements: openArray[string]) =
   ## Add a target with no handler but with requirements.
@@ -95,8 +99,8 @@ macro target*(name: string, requirements: openArray[string], body: untyped) =
     handlerBody = newStmtList()
     lastModifiedBody: NimNode = newNilLit()
     satisfiedBody: NimNode = newNilLit()
+    help = ""
   for node in body:
-    echo node.treeRepr
     if node.kind == nnkCall and node[0].kind == nnkIdent:
       case node[0].strVal.nimIdentNormalize():
       of "lastmodified":
@@ -109,6 +113,9 @@ macro target*(name: string, requirements: openArray[string], body: untyped) =
         satisfiedBody = node[1]
       else:
         handlerBody &= node
+    elif node.kind == nnkCommentStmt:
+      if help == "":
+        help = node.strVal
     else:
       handlerBody &= node
   # Build the needed procs
@@ -128,14 +135,15 @@ macro target*(name: string, requirements: openArray[string], body: untyped) =
     body = handlerBody
   )
   result = quote do:
-    addTarget(`name`, `requirements`, `lastModifiedBody`, `satisfiedBody`, `handlerBody`)
-  echo result.toStrLit
+    addTarget(`name`, `requirements`, `help`, `lastModifiedBody`, `satisfiedBody`, `handlerBody`)
+
 macro task*(name: string, requirements: untyped, body: untyped): untyped =
   ## Like [macro target] except doesn't support satisfied block (Since tasks can never be satisifed)
   result = newStmtList()
   var
     handlerBody = newStmtList()
     lastModifiedBody: NimNode = newNilLit()
+    help = ""
   for node in body:
     if node.kind == nnkCall and node[0].kind == nnkIdent:
       case node[0].strVal.nimIdentNormalize():
@@ -147,6 +155,11 @@ macro task*(name: string, requirements: untyped, body: untyped): untyped =
         "Cannot have custom satisfier in a task".error(node)
       else:
         handlerBody &= node
+    elif node.kind == nnkCommentStmt:
+      if help == "":
+        help = node.strVal
+      else:
+        "Please have all help comments together".error(node)
     else:
       handlerBody &= node
   # Build the needed procs
@@ -161,7 +174,7 @@ macro task*(name: string, requirements: untyped, body: untyped): untyped =
     body = handlerBody
   )
   result = quote do:
-    addTask(`name`, `requirements`, `lastModifiedBody`, `handlerBody`)
+    addTask(`name`, `requirements`, `help`, `lastModifiedBody`, `handlerBody`)
 
 proc lastModified*(target: Target): Time =
   ## Returns the time a target was last modified.
@@ -239,8 +252,9 @@ proc run*() =
       error(&"Command \"{e.command}\" with exit code {e.code}:\n{e.output}")
   else:
     echo "Available targets:"
-    for target in targets.keys:
-      echo "  ", target
+    for target in targets.values:
+      stdout.styledWriteLine(fgCyan, target.name, resetStyle)
+      echo target.help.indent(2)
 
 export scriptUtils
 export times
