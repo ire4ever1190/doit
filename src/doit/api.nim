@@ -44,6 +44,7 @@ proc addTarget(name: string, requires: openArray[string],
              lastModified: LastModifiedHandler = nil,
              satisfier: SatisfiedHandler = nil,
              handler: TargetHandler = nil) =
+  ## Proc to add target directly with your own handlers
   targets[name] = Target(
       name: name,
       requires: @requires,
@@ -56,15 +57,37 @@ proc addTarget(name: string, requires: openArray[string],
 proc addTask*(name: string, requires: openArray[string],
               lastModified: LastModifiedHandler = nil,
               handler: TargetHandler = nil) =
+  ## Proc to add task directly with your own handlers
   addTarget(name, requires, nil, alwaysFalse, handler)
 
 proc target*(name: string, requirements: openArray[string]) =
+  ## Add a target with no handler but with requirements.
+  ## Can be used to alias a target but [proc task] is more recommended when needing to alias
   addTarget(name, requirements)
 
 proc task*(name: string, requirements: openArray[string]) =
+  ## Adds a task with no handler but with requirements.
+  ## Use this to alias a series of requirements
   addTask(name, requirements)
 
 macro target*(name: string, requirements: openArray[string], body: untyped) =
+  ## Allows you to attach some code to a target.
+  runnableExamples:
+    target("something", ["something.nim"]):
+      cmd "nim c something.nim"
+  ## The body allows a DSL to overwrite how `doit` checks if a target
+  ## is satisified and when it was last modified (This are both optional)
+  runnableExamples:
+    import std/random
+    target("something", ["something.nim"]):
+      lastModified:
+        getTime() + 5.minutes # Lets say it was modified in the future
+      satisifed:
+        # Might be satisifed, might not be
+        rand(0..10) mod 2 == 0
+
+      cmd "nim c something.nim"
+  #==#
   # Copy the handler body across.
   # We need to do this since we need to find blocks that are other handlers
   result = newStmtList()
@@ -108,6 +131,7 @@ macro target*(name: string, requirements: openArray[string], body: untyped) =
     addTarget(`name`, `requirements`, `lastModifiedBody`, `satisfiedBody`, `handlerBody`)
   echo result.toStrLit
 macro task*(name: string, requirements: untyped, body: untyped): untyped =
+  ## Like [macro target] except doesn't support satisfied block (Since tasks can never be satisifed)
   result = newStmtList()
   var
     handlerBody = newStmtList()
