@@ -16,12 +16,12 @@ suite "Black box tests":
   setup:
     setCurrentDir(curr)
 
-  proc runTask(task: string): string =
+  template runTask(task: string): string =
     ## Just runs a task in the current dir
     let (outp, exitCode) = execCmdEx(doitBin & " " & task)
     checkpoint outp
     check exitCode == QuitSuccess
-    result = outp
+    outp
 
   template goto(folder) =
     ## Goes into a project folder and compiles the doit runner
@@ -73,3 +73,10 @@ suite "Black box tests":
     writeFile("someFile", "")
     check "Writing bar" in runTask("bar")
 
+  test "Last modification handler":
+    goto "macroDSL"
+    check "1970-01-01T10:00:10+10:00" in runTask("lastMod")
+
+  test "Satisified handler":
+    goto "macroDSL"
+    check "This shouldn't happen" notin runTask("satisfied")
