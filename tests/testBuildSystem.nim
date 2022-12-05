@@ -75,7 +75,7 @@ suite "Black box tests":
 
   test "Last modification handler":
     goto "macroDSL"
-    check "1970-01-01T10:00:10" in runTask("lastMod")
+    check $initTime(10, 0) in runTask("lastMod")
 
   test "Satisified handler":
     goto "macroDSL"
