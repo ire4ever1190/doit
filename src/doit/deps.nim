@@ -32,7 +32,7 @@ proc requirementsFor*(ext: string, handler: DepHook) =
   # Don't do any checks since we want them to override
   hookTable[ext] = handler
 
-proc nim*(path: string): seq[string] =
+proc nimDeps(path: string): seq[string] =
   ## This is more or less taken from nimsuggest
   ## TODO: Slim down, figure out what I can remove
   # There was an RFC for something like this but don't think it was ever merged
@@ -42,3 +42,4 @@ proc nim*(path: string): seq[string] =
   for line in p.lines:
     result &= line
 
+requirementsFor("nim", nimDeps)

@@ -1,9 +1,12 @@
 import std/tables
 import std/times
 import std/os
-import std/strformat
-import std/osproc
+import strformat
 import std/terminal
+import std/macros
+import std/strutils
+
+import glob, scriptUtils
 
 
 import deps
@@ -21,21 +24,17 @@ type
 
   Target* = object
     name*: string
-    requires*: seq[string]
+    help*: string
+    requires: seq[string]
     # At this point am I just reimplementing inheritance?
     lastModifiedProc: LastModifiedHandler
     satisfiedProc: SatisfiedHandler
     handler: TargetHandler
-
-  CommandFailedError* = object of OSError
-    ## Raised when command failed (If using procs here)
-    command*, output*: string
-    code*: int
-
 # TODO: Lazy load dependencies
 
 var targets*: Table[string, Target]
   ## All the targets
+
 
 proc safeLastModified(t: Target): Time =
   ## Acts like normal getLastModificationTime except returns oldest date
@@ -43,42 +42,138 @@ proc safeLastModified(t: Target): Time =
   if t.name.fileExists or t.name.dirExists:
     result = t.name.getLastModificationTime()
 
+proc alwaysFalse(t: Target): bool = false
 
-func fileExt*(path: string): string =
-  ## Returns the file extension of a path
-  let pos = path.searchExtPos()
-  if pos != -1:
-    result = path[pos + 1 .. ^1]
-
-proc target*(name: string, requires: openArray[string] = [],
-             lastModified: LastModifiedHandler = safeLastModified,
-             satisfier: SatisfiedHandler = nil,
-             handler: TargetHandler = nil) =
-  let ext = name.fileExt
+proc addTarget(name: string, requires: openArray[string],
+               help = "",
+               lastModified: LastModifiedHandler = nil,
+               satisfier: SatisfiedHandler = nil,
+               handler: TargetHandler = nil) =
+  ## Proc to add target directly with your own handlers
   targets[name] = Target(
       name: name,
       requires: @requires,
+      help: help,
       lastModifiedProc: lastModified,
       handler: handler,
       satisfiedProc: satisfier
   )
 
-proc task*(name: string, requires: openArray[string] = [],
-           lastModified: LastModifiedHandler = nil,
-           handler: TargetHandler = nil) =
-  target(name, requires, lastModified, proc (t: Target): bool = false, handler)
 
-template target*(name: string, dependencies: openArray[string], body: untyped) =
-  target(name, dependencies, handler = proc (target: Target) =
-    let t {.inject.} = target
-    body
+proc addTask*(name: string, requires: openArray[string],
+              help = "",
+              lastModified: LastModifiedHandler = nil,
+              handler: TargetHandler = nil) =
+  ## Proc to add task directly with your own handlers
+  addTarget(name, requires, help, nil, alwaysFalse, handler)
+
+proc target*(name: string, requirements: openArray[string]) =
+  ## Add a target with no handler but with requirements.
+  ## Can be used to alias a target but [proc task] is more recommended when needing to alias
+  addTarget(name, requirements)
+
+proc task*(name: string, requirements: openArray[string]) =
+  ## Adds a task with no handler but with requirements.
+  ## Use this to alias a series of requirements
+  addTask(name, requirements)
+
+iterator requirements*(t: Target): string =
+  # Keep track of when the original rules end
+  # so that we don't keep expanding rules
+  let origEnd = t.requires.len - 1
+  var
+    requirements = t.requires
+    i = 0
+  # Expand globs all at once. Says having to recurse through directories multiple times
+  block:
+    var globs: seq[Glob]
+    for requirement in requirements:
+      if '*' in requirement:
+        globs &= glob(requirement)
+    for file in globs.expand("."):
+      requirements &= file
+  echo requirements
+  while i < requirements.len:
+    let requirement = requirements[i]
+    if '*' notin requirement:
+      yield requirement
+    inc i
+
+proc parseTargetImpl(body: NimNode, isTask: bool): tuple[hand, lastMod, satisfied: NimNode, help: string] =
+  result.hand = newStmtList()
+  result.lastMod = newNilLit()
+  result.satisfied = newNilLit()
+
+
+  for node in body:
+    if node.kind == nnkCall and node[0].kind == nnkIdent:
+      case node[0].strVal.nimIdentNormalize():
+      of "lastmodified":
+        if result.lastMod.kind != nnkNilLit:
+          "lastModified handler already specified".error(node)
+        result.lastMod = node[1]
+      of "satisfied":
+        if isTask:
+          "Cannot have custom satisfier in a task".error(node)
+        else:
+          if result.satisfied.kind != nnkNilLit:
+            "satisfied handler already specified".error(node)
+          result.satisfied = node[1]
+      else:
+        result.hand &= node
+    elif node.kind == nnkCommentStmt:
+      if result.help == "":
+        result.help = node.strVal
+    else:
+      result.hand &= node
+  # Build the needed procs
+  proc targetParam(): NimNode = newIdentDefs(ident"t", bindSym"Target")
+  if result.lastMod.kind != nnkNilLit:
+    result.lastMod = newProc(
+      params = [bindSym"Time", targetParam()],
+      body = result.lastMod
+    )
+  if result.satisfied.kind != nnkNilLit:
+    result.satisfied = newProc(
+      params = [bindSym"bool", targetParam()],
+      body = result.satisfied
+    )
+  result.hand = newProc(
+    params = [newEmptyNode(), targetParam()],
+    body = result.hand
   )
 
-template task*(name: string, dependencies: openArray[string], body: untyped) =
-  task(name, dependencies, handler = proc (target: Target) =
-    let t {.inject.} = target
-    body
-  )
+
+macro target*(name: string, requirements: openArray[string], body: untyped) =
+  ## Allows you to attach some code to a target.handlerBody
+  ## The target can be accessed from within the handler with variable `t`
+  runnableExamples:
+    target("something", ["something.nim"]):
+      cmd "nim c something.nim"
+  ## The body allows a DSL to overwrite how `doit` checks if a target
+  ## is satisified and when it was last modified (This are both optional)
+  runnableExamples:
+    import std/random
+    target("something", ["something.nim"]):
+      lastModified:
+        getTime() + 5.minutes # Lets say it was modified in the future
+      satisifed:
+        # Might be satisifed, might not be
+        rand(0..10) mod 2 == 0
+
+      cmd "nim c something.nim"
+  #==#
+  # Copy the handler body across.
+  # We need to do this since we need to find blocks that are other handlers
+  let (handler, lastModified, satisifed, help) = parseTargetImpl(body, false)
+  result = quote do:
+    addTarget(`name`, `requirements`, `help`, `lastModified`, `satisifed`, `handler`)
+
+macro task*(name: string, requirements: untyped, body: untyped): untyped =
+  ## Like [macro target] except doesn't support satisfied block (Since tasks can never be satisifed)
+  let (handler, lastModified, _, help) = parseTargetImpl(body, true)
+  result = quote do:
+    addTask(`name`, `requirements`, `help`, `lastModified`, `handler`)
 
 proc lastModified*(target: Target): Time =
   ## Returns the time a target was last modified.
@@ -86,9 +181,9 @@ proc lastModified*(target: Target): Time =
   if target.lastModifiedProc != nil:
     target.lastModifiedProc(target)
   else:
-    Time.high
+    target.safeLastModified()
 
-proc satisified*(target: Target): bool =
+proc satisfied*(target: Target): bool =
   ## Returns true if a target is satisifed. Doesn't care if
   ## its out of date or not
   if target.satisfiedProc != nil:
@@ -103,78 +198,40 @@ proc handle(target: Target) =
   if target.handler != nil:
     target.handler(target)
 
-proc cmd*(cmd: string) =
-  ## Runs command and sends output to console
-  let process = startProcess(cmd, options = {poUsePath, poEvalCommand, poStdErrToStdOut, poParentStreams})
-  let code = process.waitForExit()
-  if code != 0:
-    raise (ref CommandFailedError)(code: code, command: cmd)
-
-proc rm*(path: string, recursive = false) =
-  ## Acts like `rm` command except doesn't fail if file doesn't exist.
-  ## Only deletes directorys if `recursive = true`
-  if recursive and existsDir(path):
-    removeDir(path)
-  else:
-    removeFile(path)
-
-proc mv*(src, dest: string) =
-  ## Moves **src** to **dest**. Acts like `mv` command
-  if dirExists(src):
-    moveDir(src, dest)
-  else:
-    moveFile(src, dest)
-# Some aliases to make the experience more shell like
-{.push inline.}
-proc cd*(path: string) =
-  ## Alias for [setCurrentDir](https://nim-lang.org/docs/os.html#setCurrentDir%2Cstring)
-  setCurrentDir(path)
-
-proc pwd*(): string =
-  ## Alias for [getCurrentDir](https://nim-lang.org/docs/os.html#getCurrentDir)
-  getCurrentDir()
-
-proc mkdir*(dir: string) =
-  ## Alias for [https://nim-lang.org/docs/os.html#createDir%2Cstring]. Works like `mkdir -p`
-  createDir(dir)
-
-{.pop.}
-
-template cd*(path: string, body) =
-  ## Runs **body** inside **path** and returns to previous directory when finished
-  let parent = pwd()
-  cd path
-  body
-  cd parent
-proc touch*(path: string) =
-  ## Acts like touch command. Creates file if it doesn't exist and updates modification time
-  ## if it does
-  if not path.fileExists:
-    path.writeFile("")
-  else:
-    path.setLastModificationTime(getTime())
+func exe*(file: string): string {.inline, raises: [].} =
+  ## Adds platform executable extension to binary name.
+  ## Make sure to use this when referring to binaries so they work
+  ## across platforms
+  runnableExamples:
+    when defined(windows):
+      assert "main".exe == "main.exe"
+    else:
+      assert "main".exe == "main"
+  #==#
+  file.addFileExt(ExeExt)
 
 proc error(msg: string) =
   stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
+  quit 1
 
 proc run*(target: Target) =
   ## Runs a target. Target will only run if its out of date or unsatisfied
   let modified = target.lastModified
 
   var outOfDate = modified == Time.high
-  for requirement in target.requires:
+  for requirement in target.requirements:
     var requirementModTime: Time
     if requirement in targets:
       let requireTarget = targets[requirement]
       run requireTarget
       requirementModTime = requireTarget.lastModified:
-    elif requirement.fileExists: # It might be a file
+    elif requirement.fileExists:
       requirementModTime = requirement.getLastModificationTime()
     else:
       error "Cannot satisfy requirement: " & requirement
       quit 1
     outOfDate = outOfDate or modified < requirementModTime
-  if outOfDate or not target.satisified:
+  if outOfDate or not target.satisfied:
     echo "Running ", target.name, "..."
     handle target
 
@@ -185,13 +242,18 @@ proc run*() =
   # TODO: Support arguments
   if paramCount() > 0:
     try:
-      run targets[paramStr(1)]
+      let target = paramStr(1)
+      if targets.hasKey(target):
+        run targets[paramStr(1)]
+      else:
+        error("Cannot find target: " & target) # Use this when ever running checks
     except CommandFailedError as e:
-      echo &"Command \"{e.command}\" with exit code {e.code}:"
-      echo e.output
-
+      error(&"Command \"{e.command}\" with exit code {e.code}:\n{e.output}")
   else:
     echo "Available targets:"
-    for target in targets.keys:
-      echo "  ", target
+    for target in targets.values:
+      stdout.styledWriteLine(fgCyan, target.name, resetStyle)
+      echo target.help.indent(2)
 
+export scriptUtils
+export times

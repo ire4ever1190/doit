@@ -1,41 +1,53 @@
 import std/unittest
 import doit/api
 import std/[os, osproc, strutils]
+import doit/api
+
+# Build doit first
+block:
+  let (outp, exitCode) = execCmdEx("nimble build")
+  assert exitCode == QuitSuccess, outp
+
+
+let doitBin = expandFileName("doit".exe)
+
 
 suite "Black box tests":
   let curr = getCurrentDir()
   setup:
     setCurrentDir(curr)
 
-  proc runTask(task: string): string =
+  template runTask(task: string): string =
     ## Just runs a task in the current dir
-    let (outp, exitCode) = execCmdEx("doit " & task)
+    let (outp, exitCode) = execCmdEx(doitBin & " " & task)
     checkpoint outp
-    check exitCode == 0
-    result = outp
+    check exitCode == QuitSuccess
+    outp
 
   template goto(folder) =
     ## Goes into a project folder and compiles the doit runner
     setCurrentDir("tests" / folder)
     if compileOption("forceBuild"):
       removeFile(".doit")
-    let (outp, exitCode) = execCmdEx("doit")
-    check exitCode == 0
+    let (outp, exitCode) = execCmdEx(doitBin)
+    checkpoint outp
+    check exitCode == QuitSuccess
+
 
   test "simple C++ project":
     goto("simpleCPP")
-    removeFile("main")
-    discard runTask("main")
-    check fileExists("main")
+    removeFile("main".exe)
+    discard runTask("main".exe)
+    check fileExists("main".exe)
 
   test "Tasks always run":
     goto("simpleCPP")
     writeFile("clean", "")
-    discard runTask("main")
+    discard runTask("main".exe)
     check:
-      fileExists("main")
+      fileExists("main".exe)
       "Removing main" in runTask("clean")
-      not fileExists("main")
+      not fileExists("main".exe)
       "Removing main" in runTask("clean")
 
   test "Target runs if not satisfied":
@@ -51,10 +63,10 @@ suite "Black box tests":
   test "Fails if requirement missing":
     goto("depTests")
     removeFile("someFile")
-    let (outp, exitCode) = execCmdEx("doit bar")
+    let (outp, exitCode) = execCmdEx(doItBin & " bar")
     check:
       "Cannot satisfy requirement: someFile" in outp
-      exitCode == 1
+      exitCode == QuitFailure
 
   test "Runs if requirement is newer":
     goto("depTests")
@@ -71,3 +83,25 @@ suite "Black box tests":
     touch "foo.nim"
     check "Compiling test.nim" in runTask("test")
 
+  test "Globs are expanded":
+    goto "autoDeps"
+    let outp = runTask("allDeps")
+    check:
+      "doit.nim" in outp
+      "foo.nim" in outp
+      "test.nim" in  outp
+
+  test "Last modification handler":
+    goto "macroDSL"
+    check $initTime(10, 0) in runTask("lastMod")
+
+  test "Satisified handler":
+    goto "macroDSL"
+    check "This shouldn't happen" notin runTask("satisfied")
+
+  test "Help message in output":
+    goto "macroDSL"
+    let help = runTask("")
+    check:
+      "Target with custom last modification time" in help
+      "Target that tests if satisifed or not" in help

@@ -6,4 +6,5 @@ target("foo", []):
 target("bar", ["someFile"]):
   echo "Writing bar"
   writeFile("bar", "")
+
 run()
