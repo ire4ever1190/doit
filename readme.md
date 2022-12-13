@@ -50,4 +50,4 @@ Running `doit program` will then compile the program (Running it again will do n
 - [ ] Documentation
 - [ ] Pattern matching
 - [ ] Lazy loading of dependencies
-- [ ] Automatic finding of dependencies for different file types (Maybe through some form of a hooks system for file extensions)
+- [x] Automatic finding of dependencies for different file types (Maybe through some form of a hooks system for file extensions)

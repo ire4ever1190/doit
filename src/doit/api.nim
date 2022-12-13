@@ -5,7 +5,7 @@ import strformat
 import std/terminal
 import std/macros
 import std/strutils
-
+import std/sequtils
 import glob, scriptUtils
 
 
@@ -80,22 +80,29 @@ proc task*(name: string, requirements: openArray[string]) =
 iterator requirements*(t: Target): string =
   # Keep track of when the original rules end
   # so that we don't keep expanding rules
-  let origEnd = t.requires.len - 1
   var
     requirements = t.requires
     i = 0
-  # Expand globs all at once. Says having to recurse through directories multiple times
-  block:
-    var globs: seq[Glob]
-    for requirement in requirements:
-      if '*' in requirement:
-        globs &= glob(requirement)
-    for file in globs.expand("."):
-      requirements &= file
-  echo requirements
+
+  # Expand globs
+  var globs: seq[Glob]
+  for requirement in requirements:
+    if '*' in requirement:
+      globs &= glob(requirement)
+
+  for file in globs.expand("."):
+    requirements &= file
+  # Keep track of when original requirements ended so implicit deps
+  # don't get implict depped again
+  let origEnd = requirements.len
+  # Finally return all the requirements
   while i < requirements.len:
-    let requirement = requirements[i]
-    if '*' notin requirement:
+    let
+      requirement = requirements[i]
+      (_, _, ext) = requirement.splitFile()
+    if i < origEnd and extTable.hasKey(ext):
+      requirements &= extTable[ext](requirement)
+    elif '*' notin requirement:
       yield requirement
     inc i
 
@@ -228,7 +235,7 @@ proc run*(target: Target) =
     elif requirement.fileExists:
       requirementModTime = requirement.getLastModificationTime()
     else:
-      error "Cannot satisfy requirement: " & requirement
+      error fmt"Cannot satisfy requirement: '{requirement}' for {target.name}"
       quit 1
     outOfDate = outOfDate or modified < requirementModTime
   if outOfDate or not target.satisfied:
@@ -251,6 +258,8 @@ proc run*() =
       error(&"Command \"{e.command}\" with exit code {e.code}:\n{e.output}")
   else:
     echo "Available targets:"
+    # TODO: Maybe only display if there is a help message?
+    # Would save spammy the screen with random targets
     for target in targets.values:
       stdout.styledWriteLine(fgCyan, target.name, resetStyle)
       echo target.help.indent(2)

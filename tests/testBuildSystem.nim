@@ -12,26 +12,26 @@ block:
 let doitBin = expandFileName("doit".exe)
 
 
+template runTask(task: string): string =
+  ## Just runs a task in the current dir
+  let (outp, exitCode) = execCmdEx(doitBin & " " & task)
+  checkpoint outp
+  check exitCode == QuitSuccess
+  outp
+
+template goto(folder) =
+  ## Goes into a project folder and compiles the doit runner
+  setCurrentDir("tests" / folder)
+  if compileOption("forceBuild"):
+    rm ".doit".exe
+  let (outp, exitCode) = execCmdEx(doitBin)
+  checkpoint outp
+  check exitCode == QuitSuccess
+
 suite "Black box tests":
   let curr = getCurrentDir()
   setup:
     setCurrentDir(curr)
-
-  template runTask(task: string): string =
-    ## Just runs a task in the current dir
-    let (outp, exitCode) = execCmdEx(doitBin & " " & task)
-    checkpoint outp
-    check exitCode == QuitSuccess
-    outp
-
-  template goto(folder) =
-    ## Goes into a project folder and compiles the doit runner
-    setCurrentDir("tests" / folder)
-    if compileOption("forceBuild"):
-      removeFile(".doit")
-    let (outp, exitCode) = execCmdEx(doitBin)
-    checkpoint outp
-    check exitCode == QuitSuccess
 
 
   test "simple C++ project":
@@ -65,7 +65,7 @@ suite "Black box tests":
     removeFile("someFile")
     let (outp, exitCode) = execCmdEx(doItBin & " bar")
     check:
-      "Cannot satisfy requirement: someFile" in outp
+      "Cannot satisfy requirement: 'someFile'" in outp
       exitCode == QuitFailure
 
   test "Runs if requirement is newer":
@@ -105,3 +105,21 @@ suite "Black box tests":
     check:
       "Target with custom last modification time" in help
       "Target that tests if satisifed or not" in help
+  setCurrentDir(curr)
+
+suite "Auto deps":
+  cd "tests/autoDeps"
+  when compileOption("forceBuild"):
+    rm ".doit".exe
+
+  test "Nim (JS backend)":
+    let outp = runTask("frontend.js")
+    check:
+      "frontend.nim" in outp
+      "jsfetch.nim" in outp
+
+  test "C++":
+    let outp = runTask("c++")
+    check:
+      "test.cpp" in outp
+      "test.h" in outp
