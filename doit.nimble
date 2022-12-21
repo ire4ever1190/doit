@@ -6,7 +6,7 @@ description   = "Slightly more complex make alternative"
 license       = "MIT"
 srcDir        = "src"
 installExt    = @["nim"]
-bin           = @["doit"]
+bin           = @["doit", "nimdeps"]
 
 
 # Dependencies

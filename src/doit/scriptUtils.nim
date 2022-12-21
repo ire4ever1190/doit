@@ -28,7 +28,7 @@ proc cmd*(cmd: string) =
 proc rm*(path: string, recursive = false) =
   ## Acts like `rm` command except doesn't fail if file doesn't exist.
   ## Only deletes directorys if `recursive = true`
-  if recursive and existsDir(path):
+  if recursive and dirExists(path):
     removeDir(path)
   else:
     removeFile(path)

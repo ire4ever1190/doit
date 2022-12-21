@@ -82,7 +82,7 @@ func matches*(path: string, g: Glob): bool {.raises: [].}=
 iterator expand*(globs: openArray[Glob], dir: string): string =
   ## Checks a series of globs against every file in a directory (recursively) and
   ## yields a file if any of the globs match.
-  for file in walkDirRec(dir):
+  for file in walkDirRec(dir, relative = true):
     # Check if any of the globs match the file.
     # Only one needs to match
     for glob in globs:

@@ -5,8 +5,9 @@ import strformat
 import std/terminal
 import std/macros
 import std/strutils
+import std/sequtils
 
-import glob, scriptUtils
+import glob, scriptUtils, autoreqs
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -19,9 +20,9 @@ type
     ## Gets ran to check if a target is satisfied or not.
     ## You won't need to edit this 90% of the time
 
-  Target = object
-    name: string
-    help: string
+  Target* = object
+    name*: string
+    help*: string
     requires: seq[string]
     # At this point am I just reimplementing inheritance?
     lastModifiedProc: LastModifiedHandler
@@ -29,14 +30,14 @@ type
     handler: TargetHandler
 # TODO: Lazy load dependencies
 
-
-var targets: Table[string, Target]
+var targets*: Table[string, Target]
+  ## All the targets
 
 
 proc safeLastModified(t: Target): Time =
   ## Acts like normal getLastModificationTime except returns oldest date
   ## if file doesnt exist instead of erroring
-  if t.name.fileExists:
+  if t.name.fileExists or t.name.dirExists:
     result = t.name.getLastModificationTime()
 
 proc alwaysFalse(t: Target): bool = false
@@ -73,6 +74,35 @@ proc task*(name: string, requirements: openArray[string]) =
   ## Adds a task with no handler but with requirements.
   ## Use this to alias a series of requirements
   addTask(name, requirements)
+
+iterator requirements*(t: Target): string =
+  # Keep track of when the original rules end
+  # so that we don't keep expanding rules
+  var
+    requirements = t.requires
+    i = 0
+
+  # Expand globs
+  var globs: seq[Glob]
+  for requirement in requirements:
+    if '*' in requirement:
+      globs &= glob(requirement)
+
+  for file in globs.expand("."):
+    requirements &= file
+  # Keep track of when original requirements ended so implicit deps
+  # don't get implict depped again
+  let origEnd = requirements.len
+  # Finally return all the requirements
+  while i < requirements.len:
+    let
+      requirement = requirements[i]
+      (_, _, ext) = requirement.splitFile()
+    if i < origEnd and extTable.hasKey(ext):
+      requirements &= extTable[ext](requirement)
+    elif '*' notin requirement:
+      yield requirement
+    inc i
 
 proc parseTargetImpl(body: NimNode, isTask: bool): tuple[hand, lastMod, satisfied: NimNode, help: string] =
   result.hand = newStmtList()
@@ -166,12 +196,16 @@ proc satisfied*(target: Target): bool =
   else:
     # If the target doesn't have a custom satisifier then we just
     # check if there is a file with the same name
-    target.name.fileExists
+    target.name.fileExists or target.name.dirExists
 
 proc handle(target: Target) =
   ## Runs targets handler if it exists
   if target.handler != nil:
     target.handler(target)
+
+proc exists*(target: Target): bool =
+  ## Returns true if the target exists (i.e. there is a folder/file with the same name)
+  result = target.name.fileExists or target.name.dirExists
 
 func exe*(file: string): string {.inline, raises: [].} =
   ## Adds platform executable extension to binary name.
@@ -189,26 +223,29 @@ proc error(msg: string) =
   stderr.styledWriteLine(fgRed, "[Error] ", resetStyle, msg)
   quit 1
 
-proc run(target: Target) =
+proc run*(target: Target) =
+  ## Runs a target. Target will only run if its out of date or unsatisfied
   let modified = target.lastModified
 
   var outOfDate = modified == Time.high
-
-  for requirement in target.requires:
+  for requirement in target.requirements:
     var requirementModTime: Time
     if requirement in targets:
       let requireTarget = targets[requirement]
       run requireTarget
       requirementModTime = requireTarget.lastModified:
-    elif requirement.fileExists: # It might be a file
+    elif requirement.fileExists:
       requirementModTime = requirement.getLastModificationTime()
     else:
-      error "Cannot satisfy requirement: " & requirement
+      error fmt"Cannot satisfy requirement: '{requirement}' for {target.name}"
       quit 1
     outOfDate = outOfDate or modified < requirementModTime
   if outOfDate or not target.satisfied:
     echo "Running ", target.name, "..."
     handle target
+    if target.exists:
+      # Make sure the file has been updated
+      touch target.name
 
 proc run*() =
   ## Have at the end of your doit file.
@@ -226,6 +263,8 @@ proc run*() =
       error(&"Command \"{e.command}\" with exit code {e.code}:\n{e.output}")
   else:
     echo "Available targets:"
+    # TODO: Maybe only display if there is a help message?
+    # Would save spammy the screen with random targets
     for target in targets.values:
       stdout.styledWriteLine(fgCyan, target.name, resetStyle)
       echo target.help.indent(2)
