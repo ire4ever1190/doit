@@ -13,7 +13,8 @@ import std/[
   osproc,
   compilesettings,
   strformat,
-  parseutils
+  parseutils,
+  strutils
 ]
 
 type
@@ -46,12 +47,10 @@ proc cLikeRequirements(path: string): seq[string] =
   let (outp, exitCode) = execCmdEx command
   # Unlikely this would fail, but just incase
   assert exitCode == QuitSuccess, outp
-  var i = outp.skipUntil(':')
   # Now parse each requirement thats on the right side of the :
-  while i < outp.len:
-    var newItem: string
-    i += outp.parseUntil(newItem, ' ', i)
-    result &= newItem
+  for item in outp.split(" "):
+    if not item.endsWith(":"):
+      result &= item.strip()
 
 
 
@@ -65,7 +64,7 @@ proc nimDeps(path: string): seq[string] =
   for line in p.lines:
     result &= line
 
-proc noAutoDeps(ext: string) =
+proc noAutoReqs(ext: string) =
   ## Makes a file not have any auto dependencies found for it
   extTable.del(ext)
 

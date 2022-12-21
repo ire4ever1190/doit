@@ -116,7 +116,6 @@ suite "Auto deps":
     let outp = runTask("frontend.js")
     check:
       "frontend.nim" in outp
-      "jsfetch.nim" in outp
 
   test "C++":
     let outp = runTask("c++")

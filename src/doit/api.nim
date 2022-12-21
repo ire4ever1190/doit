@@ -6,10 +6,8 @@ import std/terminal
 import std/macros
 import std/strutils
 import std/sequtils
-import glob, scriptUtils
 
-
-import deps
+import glob, scriptUtils, autoreqs
 
 type
   LastModifiedHandler* = proc (t: Target): Time
@@ -205,6 +203,10 @@ proc handle(target: Target) =
   if target.handler != nil:
     target.handler(target)
 
+proc exists*(target: Target): bool =
+  ## Returns true if the target exists (i.e. there is a folder/file with the same name)
+  result = target.name.fileExists or target.name.dirExists
+
 func exe*(file: string): string {.inline, raises: [].} =
   ## Adds platform executable extension to binary name.
   ## Make sure to use this when referring to binaries so they work
@@ -241,7 +243,7 @@ proc run*(target: Target) =
   if outOfDate or not target.satisfied:
     echo "Running ", target.name, "..."
     handle target
-    if target.fileExists:
+    if target.exists:
       # Make sure the file has been updated
       touch target.name
 

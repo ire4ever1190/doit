@@ -1,5 +1,4 @@
 import doit/api
-import doit/deps
 import sequtils
 import strutils
 
