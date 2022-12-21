@@ -241,6 +241,9 @@ proc run*(target: Target) =
   if outOfDate or not target.satisfied:
     echo "Running ", target.name, "..."
     handle target
+    if target.fileExists:
+      # Make sure the file has been updated
+      touch target.name
 
 proc run*() =
   ## Have at the end of your doit file.

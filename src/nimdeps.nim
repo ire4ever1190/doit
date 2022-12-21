@@ -75,12 +75,12 @@ self.processCmdLineAndProjectPath(conf)
 
 # Find Nim's prefix dir.
 let binaryPath = findExe("nim")
-echo conf.getPrefixDir
 if binaryPath == "":
   raise newException(IOError, "Cannot find Nim standard library: Nim compiler not in PATH")
 
-# TODO: Don't hardcode
-# TODO: Remove any paths that start with prefix i.e. ignore system modules
+conf.prefixDir = getCurrentCompilerExe().parentDir.parentDir.AbsoluteDir
+if not dirExists(conf.prefixDir / RelativeDir"lib"):
+  conf.prefixDir = AbsoluteDir""
 
 var graph = newModuleGraph(cache, conf)
 if self.loadConfigsAndProcessCmdLine(cache, conf, graph):
