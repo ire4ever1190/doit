@@ -33,6 +33,9 @@ proc rm*(path: string, recursive = false) =
   else:
     removeFile(path)
 
+proc somethingExists*(path: string): bool =
+  ## Returns true if **path** is a file or directory
+  result = path.fileExists() or path.dirExists()
 
 proc mv*(src, dest: string) =
   ## Moves **src** to **dest**. Acts like `mv` command
@@ -40,6 +43,7 @@ proc mv*(src, dest: string) =
     moveDir(src, dest)
   else:
     moveFile(src, dest)
+
 # Some aliases to make the experience more shell like
 {.push inline.}
 proc cd*(path: string) =
@@ -73,7 +77,7 @@ template cd*(path: string, body) =
 proc touch*(path: string) =
   ## Acts like touch command. Creates file if it doesn't exist and updates modification time
   ## if it does
-  if not path.fileExists:
+  if not path.somethingExists():
     path.writeFile("")
   else:
     path.setLastModificationTime(getTime())
