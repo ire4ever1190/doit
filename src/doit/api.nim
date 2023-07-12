@@ -233,7 +233,7 @@ proc run*(target: Target) =
     if requirement in targets:
       let requireTarget = targets[requirement]
       run requireTarget
-      requirementModTime = requireTarget.lastModified:
+      requirementModTime = requireTarget.lastModified
     elif requirement.fileExists:
       requirementModTime = requirement.getLastModificationTime()
     else:
